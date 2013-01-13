@@ -16,7 +16,8 @@ class ProcessListTestCase(DeviceManagerTestCase):
         filename = posixpath.join(self.dm.getDeviceRoot(), 'test_exec_file')
         # make sure the file was not already there
         self.dm.removeFile(filename)
-        self.dm.shell(['touch', filename], out)
+        self.dm.shell(['dd', 'if=/dev/zero', 'of=%s' % filename, 'bs=1024',
+                       'count=1'], out)
         # check that the file has been created
         self.assertTrue(self.dm.fileExists(filename))
         # clean up

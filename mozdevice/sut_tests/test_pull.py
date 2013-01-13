@@ -7,7 +7,7 @@ import os
 import posixpath
 
 from dmunit import DeviceManagerTestCase
-
+from mozdevice.devicemanager import DMError
 
 class PullTestCase(DeviceManagerTestCase):
 
@@ -30,4 +30,4 @@ class PullTestCase(DeviceManagerTestCase):
 
         remote_missing_file = posixpath.join(testroot, 'doesnotexist')
         self.dm.removeFile(remote_missing_file)  # just to be sure
-        self.assertEqual(self.dm.pullFile(remote_missing_file), None)
+        self.assertRaises(DMError, self.dm.pullFile, remote_missing_file)

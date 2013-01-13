@@ -27,4 +27,4 @@ class PromptTestCase(DeviceManagerTestCase):
         self.sock.connect((ip, int(port)))
         data = self.sock.recv(1024)
         print data
-        self.assert_(promptre.match(data))
+        self.assertTrue(promptre.match(data))

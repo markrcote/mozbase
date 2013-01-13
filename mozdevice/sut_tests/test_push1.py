@@ -34,7 +34,7 @@ class Push1TestCase(DeviceManagerTestCase):
         self.dm.pushDir(p1, posixpath.join(dvpath, 'push1'))
 
         # verify
-        self.assert_(
+        self.assertTrue(
             self.dm.dirExists(posixpath.join(dvpath, 'push1', 'sub.1')))
-        self.assert_(self.dm.dirExists(
+        self.assertTrue(self.dm.dirExists(
             posixpath.join(dvpath, 'push1', 'sub.1', 'sub.2')))
