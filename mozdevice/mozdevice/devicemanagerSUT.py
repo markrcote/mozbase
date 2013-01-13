@@ -4,13 +4,11 @@
 
 import select
 import socket
-import SocketServer
 import time
 import os
 import re
 import posixpath
 import subprocess
-from threading import Thread
 import StringIO
 from devicemanager import DeviceManager, DMError, NetworkTools, _pop_last_line
 import errno
@@ -794,26 +792,27 @@ class DeviceManagerSUT(DeviceManager):
         """
         cmd = 'rebt'
 
-        if (self.debug > 3):
+        if self.debug > 3:
             print "INFO: sending rebt command"
 
-        if (ipAddr is not None):
-        #create update.info file:
+        if ipAddr is not None:
+            # create update.info file:
             destname = '/data/data/com.mozilla.SUTAgentAndroid/files/update.info'
             data = "%s,%s\rrebooting\r" % (ipAddr, port)
-            self._runCmds([{ 'cmd': 'push %s %s' % (destname, len(data)), 'data': data }])
+            self._runCmds([{'cmd': 'push %s %s' % (destname, len(data)),
+                            'data': data}])
 
             ip, port = self._getCallbackIpAndPort(ipAddr, port)
             cmd += " %s %s" % (ip, port)
             # Set up our callback server
             callbacksvr = callbackServer(ip, port, self.debug)
 
-        status = self._runCmds([{ 'cmd': cmd }])
+        status = self._runCmds([{'cmd': cmd}])
 
-        if (ipAddr is not None):
+        if ipAddr is not None:
             status = callbacksvr.disconnect()
 
-        if (self.debug > 3):
+        if self.debug > 3:
             print "INFO: rebt- got status back: " + str(status)
 
     def getInfo(self, directive=None):
@@ -1048,59 +1047,48 @@ class DeviceManagerSUT(DeviceManager):
         """
         self._runCmds([{ 'cmd': "chmod "+remoteDir }])
 
-gCallbackData = ''
 
-class myServer(SocketServer.TCPServer):
-    allow_reuse_address = True
+class callbackServer(object):
 
-class callbackServer():
+    TIMEOUT = 600
+    SETTLING_TIME = 60
+    STEP = 60
+
     def __init__(self, ip, port, debuglevel):
-        global gCallbackData
-        if (debuglevel >= 1):
-            print "DEBUG: gCallbackData is: %s on port: %s" % (gCallbackData, port)
-        gCallbackData = ''
         self.ip = ip
         self.port = port
-        self.connected = False
         self.debug = debuglevel
-        if (self.debug >= 3):
-            print "Creating server with " + str(ip) + ":" + str(port)
-        self.server = myServer((ip, port), self.myhandler)
-        self.server_thread = Thread(target=self.server.serve_forever)
-        self.server_thread.setDaemon(True)
-        self.server_thread.start()
+        if self.debug >= 3:
+            print 'Creating server with %s:%d' % (ip, port)
 
-    def disconnect(self, step = 60, timeout = 600):
-        t = 0
-        if (self.debug >= 3):
-            print "Calling disconnect on callback server"
-        while t < timeout:
-            if (gCallbackData):
-                # Got the data back
-                if (self.debug >= 3):
-                    print "Got data back from agent: " + str(gCallbackData)
-                break
-            else:
-                if (self.debug >= 0):
-                    print '.',
-            time.sleep(step)
-            t += step
-
-        try:
-            if (self.debug >= 3):
-                print "Shutting down server now"
-            self.server.shutdown()
-        except:
-            if (self.debug >= 1):
-                print "Automation Error: Unable to shutdown callback server - check for a connection on port: " + str(self.port)
-
-        #sleep 1 additional step to ensure not only we are online, but all our services are online
-        time.sleep(step)
-        return gCallbackData
-
-    class myhandler(SocketServer.BaseRequestHandler):
-        def handle(self):
-            global gCallbackData
-            gCallbackData = self.request.recv(1024)
-            #print "Callback Handler got data: " + str(gCallbackData)
-            self.request.send("OK")
+    def disconnect(self):
+        timeout = time.time() + self.TIMEOUT
+        conn = None
+        data = ''
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        s.settimeout(float(self.STEP))
+        s.bind((self.ip, self.port))
+        s.listen(1)
+        while not data and time.time() < timeout:
+            try:
+                if not conn:
+                    conn, _ = s.accept()
+                # receiving any data is good enough
+                data = conn.recv(1024)
+                if data:
+                    conn.sendall('OK')
+                conn.close()
+            except socket.timeout:
+                print '.'
+            except socket.error, e:
+                if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
+                    raise
+        if data:
+            # sleep to ensure not only we are online, but all our services are
+            # also up
+            time.sleep(self.SETTLING_TIME)
+        else:
+            print 'timed out waiting for reboot callback'
+        s.close()
+        return data
